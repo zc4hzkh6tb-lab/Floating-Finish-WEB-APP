@@ -27,3 +27,11 @@ Dann http://localhost:3000 öffnen.
 ## Tech
 
 Next.js 15 (App Router, TypeScript), Tailwind CSS 4, Prisma 6 mit PostgreSQL (später Supabase), Zod.
+
+## Test-Deployment (Vercel + Supabase, kostenlos)
+
+1. Auf supabase.com ein Projekt anlegen (Region Frankfurt). Unter **Connect** den Connection String „Session pooler“ kopieren und das Datenbank-Passwort einsetzen.
+2. Auf vercel.com mit GitHub anmelden, dieses Repository importieren und unter **Environment Variables** eintragen:
+   - `DATABASE_URL` – der Connection String aus Schritt 1
+   - `BACKOFFICE_USER` und `BACKOFFICE_PASSWORD` – Zugang fürs Backoffice
+3. **Deploy** klicken. Beim Build laufen automatisch die Datenbank-Migrationen und die Startdaten (`vercel-build`).
