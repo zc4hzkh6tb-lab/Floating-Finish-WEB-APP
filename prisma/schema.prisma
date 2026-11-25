@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Stammdaten ----------
+
+model Series {
+  id        String   @id @default(cuid())
+  code      String   @unique // z. B. DTTO, NTTM, ETPC, GP, ATPI
+  name      String
+  note      String? // z. B. "Zeitnahme über Serie hinterlegt"
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  bookings  BookingSeries[]
+}
+
+model Package {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  description   String
+  priceCategory String // grobe Preiskategorie, z. B. "€", "€€", "€€€"
+  sortOrder     Int      @default(0)
+  active        Boolean  @default(true)
+  // Regeln für die Empfehlung aus Schritt 1
+  maxPerspectives Int?
+  maxSpeakers     Int?
+  includedAddons  PackageAddon[]
+  bookings        BookingRequest[]
+}
+
+model AddonCategory {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String
+  sortOrder Int     @default(0)
+  addons    Addon[]
+}
+
+model Addon {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  description String?
+  categoryId  String
+  category    AddonCategory @relation(fields: [categoryId], references: [id])
+  priceHint   String? // grober Richtpreis, z. B. "ab 350 € / Tag"
+  isLedWall   Boolean       @default(false) // löst die LED-Wand-Seite aus
+  sortOrder   Int           @default(0)
+  active      Boolean       @default(true)
+  inPackages  PackageAddon[]
+  bookings    BookingAddon[]
+}
+
+model PackageAddon {
+  packageId String
+  addonId   String
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  addon     Addon   @relation(fields: [addonId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, addonId])
+}
+
+// ---------- Buchungsanfragen ----------
+
+enum BookingStatus {
+  ANFRAGE
+  ANGEBOT
+  BESTAETIGT
+  IN_PLANUNG
+  DURCHGEFUEHRT
+  ABGERECHNET
+  ABGESAGT
+}
+
+model BookingRequest {
+  id        String        @id @default(cuid())
+  number    Int           @unique @default(autoincrement())
+  status    BookingStatus @default(ANFRAGE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Seite 0 – Veranstaltung
+  organizer        String
+  contactName      String
+  contactEmail     String
+  contactPhone     String?
+  eventName        String
+  eventLocation    String
+  expectedVisitors Int?
+  classes          String // gefahrene Klassen, Freitext
+  otherSeries      String? // freie Klassen / sonstige Serie
+  catering         String?
+  accommodation    String?
+  internet         String?
+  notes            String?
+
+  // Schritt 1 – Grundsetup
+  perspectives   Int?
+  speakers       Int?
+  ledPlayout     String? // NONE | STREAM | STREAM_ADS | OWN_MIX
+  packageId      String?
+  package        Package? @relation(fields: [packageId], references: [id])
+
+  days    BookingDay[]
+  series  BookingSeries[]
+  addons  BookingAddon[]
+  ledWall LedWallRequest?
+}
+
+model BookingDay {
+  id        String         @id @default(cuid())
+  bookingId String
+  booking   BookingRequest @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  date      DateTime       @db.Date
+  startTime String // "HH:MM"
+  endTime   String
+  note      String?
+  addons    BookingAddonDay[]
+}
+
+model BookingSeries {
+  bookingId String
+  seriesId  String
+  booking   BookingRequest @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  series    Series         @relation(fields: [seriesId], references: [id])
+
+  @@id([bookingId, seriesId])
+}
+
+model BookingAddon {
+  id        String         @id @default(cuid())
+  bookingId String
+  addonId   String
+  booking   BookingRequest @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addon     Addon          @relation(fields: [addonId], references: [id])
+  days      BookingAddonDay[]
+}
+
+model BookingAddonDay {
+  bookingAddonId String
+  dayId          String
+  bookingAddon   BookingAddon @relation(fields: [bookingAddonId], references: [id], onDelete: Cascade)
+  day            BookingDay   @relation(fields: [dayId], references: [id], onDelete: Cascade)
+
+  @@id([bookingAddonId, dayId])
+}
+
+model LedWallRequest {
+  id          String         @id @default(cuid())
+  bookingId   String         @unique
+  booking     BookingRequest @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  count       Int
+  size        String
+  placements  String[] // START, ZIEL, SEITE_LI, SEITE_RE, ENDE_LI, ENDE_RE
+  hasMount    Boolean
+  mountInfo   String?
+}
