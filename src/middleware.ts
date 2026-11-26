@@ -1,18 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { BACKOFFICE_ROLES, SESSION_COOKIE, verifySession } from "@/lib/session";
 
-// Vorläufiger Schutz fürs Backoffice per Benutzer/Passwort aus den Umgebungsvariablen.
-// Wird in Stufe 1 später durch richtigen Login ersetzt.
-export function middleware(req: NextRequest) {
-  const user = process.env.BACKOFFICE_USER;
-  const pass = process.env.BACKOFFICE_PASSWORD;
-  if (!user || !pass) return new NextResponse("Backoffice nicht konfiguriert", { status: 503 });
-  const header = req.headers.get("authorization") ?? "";
-  const [scheme, encoded] = header.split(" ");
-  if (scheme === "Basic" && encoded) {
-    const [u, ...rest] = atob(encoded).split(":");
-    if (u === user && rest.join(":") === pass) return NextResponse.next();
+// Schützt Backoffice (Admin, Planung) und Team-App (alle angemeldeten Nutzer).
+export async function middleware(req: NextRequest) {
+  const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+  const path = req.nextUrl.pathname;
+  if (!session) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("next", path);
+    return NextResponse.redirect(url);
   }
-  return new NextResponse("Anmeldung erforderlich", { status: 401, headers: { "WWW-Authenticate": 'Basic realm="Backoffice"' } });
+  if (path.startsWith("/backoffice") && !BACKOFFICE_ROLES.includes(session.role)) {
+    return NextResponse.redirect(new URL("/app", req.url));
+  }
+  return NextResponse.next();
 }
 
-export const config = { matcher: ["/backoffice/:path*"] };
+export const config = { matcher: ["/backoffice/:path*", "/app/:path*"] };

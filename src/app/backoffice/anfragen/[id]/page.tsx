@@ -3,15 +3,20 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { LED_PLACEMENTS, LED_PLAYOUT, ledOnSiteNeeds, type LedPlacement, type LedPlayout } from "@/lib/booking";
 import { STATUS_LABEL, fmtDay } from "@/lib/labels";
-import { addBookingAddon, addHistoryEntry, removeBookingAddon, saveInternalNotes, setBookingPackage, setBookingStatus } from "../../actions";
+import { StatusBadge } from "../../StatusBadge";
+import { createStaffRequests, withdrawStaffRequest, addBookingAddon, addHistoryEntry, removeBookingAddon, saveInternalNotes, setBookingPackage, setBookingStatus } from "../../actions";
 
 export const dynamic = "force-dynamic";
+
+const STAFF_LABEL = { OFFEN: "offen", ZUGESAGT: "zugesagt", ABGESAGT: "abgesagt", ZURUECKGEZOGEN: "zurückgezogen" } as const;
+const STAFF_BAR = { OFFEN: "border-l-amber-500", ZUGESAGT: "border-l-emerald-500", ABGESAGT: "border-l-red-500", ZURUECKGEZOGEN: "border-l-neutral-600" } as const;
+const STAFF_TEXT = { OFFEN: "text-amber-300", ZUGESAGT: "text-emerald-300", ABGESAGT: "text-red-300", ZURUECKGEZOGEN: "text-neutral-500" } as const;
 
 const fmtTime = (d: Date) => d.toLocaleString("de-DE", { timeZone: "Europe/Berlin", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default async function AnfragePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [b, packages, categories] = await Promise.all([
+  const [b, packages, categories, team] = await Promise.all([
     prisma.bookingRequest.findUnique({
       where: { id },
       include: {
@@ -21,10 +26,12 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
         addons: { include: { addon: true, days: { include: { day: true } } }, orderBy: { addon: { sortOrder: "asc" } } },
         ledWall: true,
         events: { orderBy: { createdAt: "desc" } },
+        staff: { include: { user: true, days: { include: { day: true } } }, orderBy: { createdAt: "asc" } },
       },
     }),
     prisma.package.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.addonCategory.findMany({ orderBy: { sortOrder: "asc" }, include: { addons: { where: { active: true }, orderBy: { sortOrder: "asc" } } } }),
+    prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
   ]);
   if (!b) notFound();
   const answers = (Array.isArray(b.customAnswers) ? b.customAnswers : []) as { label: string; answer: string }[];
@@ -44,7 +51,7 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
       <Link href="/backoffice" className="text-sm text-neutral-400 hover:text-white">← Alle Anfragen</Link>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">#{b.number} {b.eventName}</h1>
+          <h1 className="flex flex-wrap items-center gap-3 text-2xl font-bold">#{b.number} {b.eventName} <StatusBadge status={b.status} /></h1>
           <p className="text-sm text-neutral-400">Eingegangen am {fmtTime(b.createdAt)}</p>
         </div>
         <form action={setBookingStatus} className="flex items-center gap-2">
@@ -141,6 +148,48 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
             </ul>
           </Card>
         )}
+
+        <Card title="Personal">
+          {b.staff.length === 0 && <p className="text-neutral-500">Noch niemand angefragt</p>}
+          <div className="space-y-2">
+            {b.staff.map((r) => (
+              <div key={r.id} className={`rounded-lg border-l-4 bg-neutral-900/50 p-2 ${STAFF_BAR[r.status]}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-medium">{r.user.name} <span className="text-neutral-400">· {r.task}</span></div>
+                    <div className="text-xs text-neutral-500">{r.days.map((d) => d.day).sort((x, y) => +x.date - +y.date).map((d) => fmtDay(d.date)).join(", ")}</div>
+                    {r.responseNote && <div className="mt-1 text-xs text-neutral-300">„{r.responseNote}“</div>}
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-xs font-semibold ${STAFF_TEXT[r.status]}`}>{STAFF_LABEL[r.status]}</span>
+                    {(r.status === "OFFEN" || r.status === "ZUGESAGT") && (
+                      <form action={withdrawStaffRequest}>
+                        <input type="hidden" name="staffRequestId" value={r.id} />
+                        <button className="text-xs text-red-400 hover:underline">zurückziehen</button>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <form action={createStaffRequests} className="mt-4 space-y-2 border-t border-neutral-800 pt-3">
+            <input type="hidden" name="id" value={b.id} />
+            <input name="task" className="input" placeholder="Aufgabe, z. B. Kamera Erdwall" required />
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {team.map((u) => (
+                <label key={u.id} className="flex items-center gap-1.5 text-xs">
+                  <input type="checkbox" name="userIds" value={u.id} className="size-3.5 accent-amber-500" />
+                  {u.name}{u.position ? <span className="text-neutral-500">({u.position})</span> : null}
+                </label>
+              ))}
+              {team.length === 0 && <span className="text-xs text-neutral-500">Noch keine Nutzer angelegt</span>}
+            </div>
+            <DayChecks selected={new Set(b.days.map((d) => d.id))} />
+            <input name="message" className="input" placeholder="Nachricht (optional)" />
+            <button className="btn-ghost">Anfrage an Team senden</button>
+          </form>
+        </Card>
 
         <Card title="Interne Notizen">
           <form action={saveInternalNotes} className="space-y-2">

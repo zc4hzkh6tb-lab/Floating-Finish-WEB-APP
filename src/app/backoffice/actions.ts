@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { Prisma, type BookingStatus, type QuestionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { STATUS_LABEL, fmtDay } from "@/lib/labels";
+import { requireBackoffice } from "@/lib/auth";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const optStr = (f: FormData, k: string) => str(f, k) || null;
@@ -48,6 +48,7 @@ async function deleteOrDeactivate(del: () => Promise<unknown>, deactivate: () =>
 
 // ---------- Serien ----------
 export async function saveSeries(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const data = { name: str(f, "name"), color: str(f, "color") || "#f59e0b", note: optStr(f, "note"), sortOrder: int(f, "sortOrder"), active: bool(f, "active") };
   if (!data.name) return;
@@ -59,6 +60,7 @@ export async function saveSeries(f: FormData) {
   done("/backoffice/stammdaten/serien");
 }
 export async function deleteSeries(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   await deleteOrDeactivate(() => prisma.series.delete({ where: { id } }), () => prisma.series.update({ where: { id }, data: { active: false } }));
   done("/backoffice/stammdaten/serien");
@@ -66,6 +68,7 @@ export async function deleteSeries(f: FormData) {
 
 // ---------- Klassen ----------
 export async function saveClass(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const data = { name: str(f, "name"), sortOrder: int(f, "sortOrder"), active: id ? bool(f, "active") : true };
   if (!data.name) return;
@@ -74,12 +77,14 @@ export async function saveClass(f: FormData) {
   done("/backoffice/stammdaten/klassen");
 }
 export async function deleteClass(f: FormData) {
+  await requireBackoffice();
   await prisma.vehicleClass.delete({ where: { id: str(f, "id") } });
   done("/backoffice/stammdaten/klassen");
 }
 
 // ---------- LED-Größen ----------
 export async function saveLedSize(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const data = { label: str(f, "label"), sortOrder: int(f, "sortOrder"), active: id ? bool(f, "active") : true };
   if (!data.label) return;
@@ -88,12 +93,14 @@ export async function saveLedSize(f: FormData) {
   done("/backoffice/stammdaten/led-groessen");
 }
 export async function deleteLedSize(f: FormData) {
+  await requireBackoffice();
   await prisma.ledSize.delete({ where: { id: str(f, "id") } });
   done("/backoffice/stammdaten/led-groessen");
 }
 
 // ---------- Add-on-Kategorien & Add-ons ----------
 export async function saveCategory(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const data = { name: str(f, "name"), sortOrder: int(f, "sortOrder") };
   if (!data.name) return;
@@ -105,12 +112,14 @@ export async function saveCategory(f: FormData) {
   done("/backoffice/stammdaten/addons");
 }
 export async function deleteCategory(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   if ((await prisma.addon.count({ where: { categoryId: id } })) > 0) return; // nur leere Kategorien löschen
   await prisma.addonCategory.delete({ where: { id } });
   done("/backoffice/stammdaten/addons");
 }
 export async function saveAddon(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const data = {
     name: str(f, "name"),
@@ -130,6 +139,7 @@ export async function saveAddon(f: FormData) {
   done("/backoffice/stammdaten/addons", "/backoffice/stammdaten/pakete");
 }
 export async function deleteAddon(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   await deleteOrDeactivate(() => prisma.addon.delete({ where: { id } }), () => prisma.addon.update({ where: { id }, data: { active: false } }));
   done("/backoffice/stammdaten/addons", "/backoffice/stammdaten/pakete");
@@ -137,6 +147,7 @@ export async function deleteAddon(f: FormData) {
 
 // ---------- Pakete ----------
 export async function savePackage(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const data = {
     name: str(f, "name"),
@@ -162,6 +173,7 @@ export async function savePackage(f: FormData) {
   done("/backoffice/stammdaten/pakete");
 }
 export async function deletePackage(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   await deleteOrDeactivate(() => prisma.package.delete({ where: { id } }), () => prisma.package.update({ where: { id }, data: { active: false } }));
   done("/backoffice/stammdaten/pakete");
@@ -169,6 +181,7 @@ export async function deletePackage(f: FormData) {
 
 // ---------- Eigene Fragen ----------
 export async function saveQuestion(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const type = (str(f, "type") || "TEXT") as QuestionType;
   const data = {
@@ -186,16 +199,14 @@ export async function saveQuestion(f: FormData) {
   done("/backoffice/fragen");
 }
 export async function deleteQuestion(f: FormData) {
+  await requireBackoffice();
   await prisma.customQuestion.delete({ where: { id: str(f, "id") } });
   done("/backoffice/fragen");
 }
 
 // ---------- Anfragen ----------
 async function actor() {
-  const h = (await headers()).get("authorization") ?? "";
-  const [scheme, enc] = h.split(" ");
-  if (scheme === "Basic" && enc) return Buffer.from(enc, "base64").toString().split(":")[0] || "Backoffice";
-  return "Backoffice";
+  return (await requireBackoffice()).name;
 }
 
 async function log(bookingId: string, text: string) {
@@ -205,6 +216,7 @@ async function log(bookingId: string, text: string) {
 }
 
 export async function setBookingStatus(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const status = str(f, "status") as BookingStatus;
   const old = await prisma.bookingRequest.findUniqueOrThrow({ where: { id } });
@@ -214,6 +226,7 @@ export async function setBookingStatus(f: FormData) {
 }
 
 export async function setBookingPackage(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const packageId = str(f, "packageId") || null;
   const old = await prisma.bookingRequest.findUniqueOrThrow({ where: { id }, include: { package: true } });
@@ -224,6 +237,7 @@ export async function setBookingPackage(f: FormData) {
 }
 
 export async function addBookingAddon(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const addonId = str(f, "addonId");
   const dayIds = f.getAll("dayIds").map(String);
@@ -241,6 +255,7 @@ export async function addBookingAddon(f: FormData) {
 }
 
 export async function removeBookingAddon(f: FormData) {
+  await requireBackoffice();
   const bookingAddonId = str(f, "bookingAddonId");
   const ba = await prisma.bookingAddon.findUniqueOrThrow({ where: { id: bookingAddonId }, include: { addon: true } });
   await prisma.bookingAddon.delete({ where: { id: bookingAddonId } });
@@ -248,6 +263,7 @@ export async function removeBookingAddon(f: FormData) {
 }
 
 export async function saveInternalNotes(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const internalNotes = optStr(f, "internalNotes");
   const old = await prisma.bookingRequest.findUniqueOrThrow({ where: { id } });
@@ -257,8 +273,33 @@ export async function saveInternalNotes(f: FormData) {
 }
 
 export async function addHistoryEntry(f: FormData) {
+  await requireBackoffice();
   const id = str(f, "id");
   const text = str(f, "text");
   if (!text) return;
   await log(id, text);
+}
+
+// ---------- Personalanfragen ----------
+export async function createStaffRequests(f: FormData) {
+  await requireBackoffice();
+  const id = str(f, "id");
+  const userIds = f.getAll("userIds").map(String);
+  const dayIds = f.getAll("dayIds").map(String);
+  const task = str(f, "task");
+  if (!userIds.length || !dayIds.length || !task) return;
+  const users = await prisma.user.findMany({ where: { id: { in: userIds }, active: true } });
+  for (const u of users) {
+    await prisma.staffRequest.create({
+      data: { bookingId: id, userId: u.id, task, message: optStr(f, "message"), days: { create: dayIds.map((dayId) => ({ dayId })) } },
+    });
+  }
+  const days = await prisma.bookingDay.findMany({ where: { id: { in: dayIds } }, orderBy: { date: "asc" } });
+  await log(id, `Personal angefragt (${task}, ${days.map((d) => fmtDay(d.date)).join(", ")}): ${users.map((u) => u.name).join(", ")}`);
+}
+
+export async function withdrawStaffRequest(f: FormData) {
+  await requireBackoffice();
+  const sr = await prisma.staffRequest.update({ where: { id: str(f, "staffRequestId") }, data: { status: "ZURUECKGEZOGEN" }, include: { user: true } });
+  await log(sr.bookingId, `Personalanfrage zurückgezogen: ${sr.user.name} (${sr.task})`);
 }

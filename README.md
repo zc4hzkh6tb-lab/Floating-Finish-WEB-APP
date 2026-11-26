@@ -10,6 +10,12 @@ Buchungstool, Backoffice und (später) Team-App für Livestreams von Tractor-Pul
 
 **Platzhalter:** Pakete (Basis/Standard/Premium), LED-Wand-Größen, Richtpreise und die „vor Ort benötigt“-Hinweise sind vorläufig.
 
+## Login und Rollen
+
+- `/login` für Backoffice und Team-App. Beim allerersten Login (noch keine Nutzer) wird mit `BACKOFFICE_USER` / `BACKOFFICE_PASSWORD` automatisch ein Admin angelegt.
+- Rollen: **Admin** (alles inkl. Nutzerverwaltung), **Planung** (Backoffice), **Team** (nur Team-App unter `/app`).
+- Empfohlen: `AUTH_SECRET` (lange Zufallszeichenkette) als Umgebungsvariable setzen.
+
 ## Lokal starten
 
 Voraussetzung: Node.js 20+ und eine PostgreSQL-Datenbank.

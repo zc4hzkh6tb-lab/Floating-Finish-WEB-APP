@@ -148,6 +148,7 @@ model BookingRequest {
 
   days    BookingDay[]
   events  BookingEvent[]
+  staff   StaffRequest[]
   series  BookingSeries[]
   addons  BookingAddon[]
   ledWall LedWallRequest?
@@ -162,6 +163,7 @@ model BookingDay {
   endTime   String
   note      String?
   addons    BookingAddonDay[]
+  staff     StaffRequestDay[]
 }
 
 model BookingSeries {
@@ -210,4 +212,62 @@ model BookingEvent {
   createdAt DateTime       @default(now())
   actor     String // "Kunde" oder Backoffice-Benutzer
   text      String
+}
+
+// ---------- Nutzer & Personal ----------
+
+enum Role {
+  ADMIN // alles inkl. Nutzerverwaltung
+  PLANUNG // Backoffice: Anfragen, Stammdaten, Personal
+  TEAM // nur Team-App
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  username           String   @unique
+  name               String
+  email              String?
+  phone              String?
+  passwordHash       String
+  role               Role     @default(TEAM)
+  active             Boolean  @default(true)
+  mustChangePassword Boolean  @default(true)
+  // Steckbrief
+  position           String? // z. B. "Kamera, Regie"
+  skills             String?
+  bio                String?
+  icalToken          String   @unique @default(cuid())
+  createdAt          DateTime @default(now())
+  staffRequests      StaffRequest[]
+}
+
+enum StaffRequestStatus {
+  OFFEN
+  ZUGESAGT
+  ABGESAGT
+  ZURUECKGEZOGEN
+}
+
+model StaffRequest {
+  id           String             @id @default(cuid())
+  bookingId    String
+  booking      BookingRequest     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task         String // Aufgabe, z. B. "Kamera Erdwall"
+  message      String?
+  status       StaffRequestStatus @default(OFFEN)
+  responseNote String?
+  createdAt    DateTime           @default(now())
+  respondedAt  DateTime?
+  days         StaffRequestDay[]
+}
+
+model StaffRequestDay {
+  staffRequestId String
+  dayId          String
+  staffRequest   StaffRequest @relation(fields: [staffRequestId], references: [id], onDelete: Cascade)
+  day            BookingDay   @relation(fields: [dayId], references: [id], onDelete: Cascade)
+
+  @@id([staffRequestId, dayId])
 }
