@@ -30,6 +30,10 @@ Next.js 15 (App Router, TypeScript), Tailwind CSS 4, Prisma 6 mit PostgreSQL (sp
 
 ## Test-Deployment (Vercel + Supabase, kostenlos)
 
+**Einfachster Weg:** Im Vercel-Projekt unter **Storage → Create Database → Supabase** eine Datenbank verbinden. Vercel setzt die Zugangsdaten dann selbst, `DATABASE_URL` wird nicht gebraucht. Danach Backoffice-Variablen setzen und neu deployen.
+
+Alternativ manuell:
+
 1. Auf supabase.com ein Projekt anlegen (Region Frankfurt). Unter **Connect** den Connection String „Session pooler“ kopieren und das Datenbank-Passwort einsetzen.
 2. Auf vercel.com mit GitHub anmelden, dieses Repository importieren und unter **Environment Variables** eintragen:
    - `DATABASE_URL` – der Connection String aus Schritt 1
