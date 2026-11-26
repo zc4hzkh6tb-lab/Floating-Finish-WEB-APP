@@ -14,6 +14,7 @@ model Series {
   code      String   @unique // z. B. DTTO, NTTM, ETPC, GP, ATPI
   name      String
   note      String? // z. B. "Zeitnahme über Serie hinterlegt"
+  color     String   @default("#f59e0b") // Leuchtfarbe in der Buchung
   sortOrder Int      @default(0)
   active    Boolean  @default(true)
   bookings  BookingSeries[]
@@ -66,6 +67,40 @@ model PackageAddon {
   @@id([packageId, addonId])
 }
 
+model VehicleClass {
+  id        String  @id @default(cuid())
+  name      String  @unique // z. B. "3,5 t Sport"
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+}
+
+model LedSize {
+  id        String  @id @default(cuid())
+  label     String  @unique // z. B. "4 × 2,5 m"
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+}
+
+enum QuestionType {
+  TEXT
+  NUMBER
+  YESNO
+  SELECT
+}
+
+// Eigene Fragen, die im Backoffice angelegt werden und auf Seite 0 erscheinen
+model CustomQuestion {
+  id        String       @id @default(cuid())
+  label     String
+  help      String?
+  type      QuestionType @default(TEXT)
+  options   String[] // nur bei SELECT
+  required  Boolean      @default(false)
+  sortOrder Int          @default(0)
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+}
+
 // ---------- Buchungsanfragen ----------
 
 enum BookingStatus {
@@ -99,6 +134,8 @@ model BookingRequest {
   accommodation    String?
   internet         String?
   notes            String?
+  // Antworten auf eigene Fragen: [{ label, answer }]
+  customAnswers    Json?
 
   // Schritt 1 – Grundsetup
   perspectives   Int?
@@ -107,7 +144,10 @@ model BookingRequest {
   packageId      String?
   package        Package? @relation(fields: [packageId], references: [id])
 
+  internalNotes String?
+
   days    BookingDay[]
+  events  BookingEvent[]
   series  BookingSeries[]
   addons  BookingAddon[]
   ledWall LedWallRequest?
@@ -160,4 +200,14 @@ model LedWallRequest {
   placements  String[] // START, ZIEL, SEITE_LI, SEITE_RE, ENDE_LI, ENDE_RE
   hasMount    Boolean
   mountInfo   String?
+}
+
+// Historie einer Anfrage
+model BookingEvent {
+  id        String         @id @default(cuid())
+  bookingId String
+  booking   BookingRequest @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  actor     String // "Kunde" oder Backoffice-Benutzer
+  text      String
 }

@@ -7,7 +7,15 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Ungültige Angaben", issues: parsed.error.issues }, { status: 400 });
   }
-  const { event, setup, addons, ledWall } = parsed.data;
+  const { event, setup, addons, ledWall, answers } = parsed.data;
+
+  const questions = await prisma.customQuestion.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
+  for (const q of questions) {
+    if (q.required && !answers[q.id]?.trim()) return NextResponse.json({ error: `Bitte beantworten: ${q.label}` }, { status: 400 });
+  }
+  const customAnswers = questions
+    .filter((q) => answers[q.id]?.trim())
+    .map((q) => ({ label: q.label, answer: q.type === "YESNO" ? (answers[q.id] === "ja" ? "Ja" : "Nein") : answers[q.id].trim() }));
 
   const [pkg, series, addonRows] = await Promise.all([
     prisma.package.findUnique({ where: { code: setup.packageCode }, include: { includedAddons: { include: { addon: true } } } }),
@@ -42,6 +50,7 @@ export async function POST(req: Request) {
         accommodation: event.accommodation || null,
         internet: event.internet || null,
         notes: event.notes || null,
+        customAnswers: customAnswers.length ? customAnswers : undefined,
         perspectives: setup.perspectives,
         speakers: setup.speakers,
         ledPlayout: setup.ledPlayout,
@@ -67,6 +76,7 @@ export async function POST(req: Request) {
         data: { bookingId: b.id, count: ledWall.count, size: ledWall.size, placements: ledWall.placements, hasMount: ledWall.hasMount, mountInfo: ledWall.mountInfo || null },
       });
     }
+    await tx.bookingEvent.create({ data: { bookingId: b.id, actor: "Kunde", text: "Anfrage über die Buchungsseite eingegangen" } });
     return b;
   });
 

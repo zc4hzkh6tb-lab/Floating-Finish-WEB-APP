@@ -26,9 +26,6 @@ export const LED_PLACEMENTS = {
 } as const;
 export type LedPlacement = keyof typeof LED_PLACEMENTS;
 
-// PLATZHALTER – echte Größen folgen
-export const LED_SIZES = ["3 × 2 m", "4 × 2,5 m", "5 × 3 m", "6 × 3,5 m"] as const;
-
 const time = z.string().regex(/^\d{2}:\d{2}$/, "Uhrzeit fehlt");
 
 export const daySchema = z
@@ -81,6 +78,7 @@ export const ledWallSchema = z.object({
 
 export const bookingSchema = z.object({
   event: eventSchema,
+  answers: z.record(z.string(), z.string()).default({}),
   setup: setupSchema,
   addons: z.array(addonSelectionSchema),
   ledWall: ledWallSchema.nullable(),

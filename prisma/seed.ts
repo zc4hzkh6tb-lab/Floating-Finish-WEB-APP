@@ -42,28 +42,44 @@ const packages = [
   { code: "PREMIUM", name: "Premium", description: "Platzhalter: große VA, volle Abdeckung", priceCategory: "€€€", maxPerspectives: null, maxSpeakers: null, included: ["PTZ_START", "PTZ_ERDWALL", "CAM_MOBILE_DRONE"] },
 ];
 
+// BEISPIELE – im Backoffice unter Stammdaten anpassbar
+const classes = ["3,5 t Standard", "3,5 t Sport", "4,5 t Standard", "4,5 t Sport", "6 t Sport", "8 t Sport", "Garden Pulling"];
+const ledSizes = ["3 × 2 m", "4 × 2,5 m", "5 × 3 m", "6 × 3,5 m"];
+const seriesColors: Record<string, string> = { DTTO: "#ef4444", NTTM: "#f97316", ETPC: "#3b82f6", GP: "#22c55e", ATPI: "#a855f7" };
+
+// Startdaten nur anlegen, wenn die jeweilige Tabelle leer ist.
+// So überschreibt ein neuer Deploy keine Änderungen aus dem Backoffice.
 async function main() {
-  for (const [i, [code, name]] of series.entries()) {
-    await prisma.series.upsert({ where: { code }, update: { name, sortOrder: i }, create: { code, name, sortOrder: i, note: "Zeitnahme über Serie hinterlegt" } });
+  if ((await prisma.series.count()) === 0) {
+    for (const [i, [code, name]] of series.entries()) {
+      await prisma.series.create({ data: { code, name, sortOrder: i, color: seriesColors[code] ?? "#f59e0b", note: "Zeitnahme über Serie hinterlegt" } });
+    }
   }
-  for (const [i, [code, name]] of categories.entries()) {
-    await prisma.addonCategory.upsert({ where: { code }, update: { name, sortOrder: i }, create: { code, name, sortOrder: i } });
+  if ((await prisma.vehicleClass.count()) === 0) {
+    await prisma.vehicleClass.createMany({ data: classes.map((name, i) => ({ name, sortOrder: i })) });
   }
-  for (const [i, [code, name, cat, isLedWall]] of addons.entries()) {
-    const category = await prisma.addonCategory.findUniqueOrThrow({ where: { code: cat } });
-    await prisma.addon.upsert({
-      where: { code },
-      update: { name, categoryId: category.id, isLedWall, sortOrder: i },
-      create: { code, name, categoryId: category.id, isLedWall, sortOrder: i },
-    });
+  if ((await prisma.ledSize.count()) === 0) {
+    await prisma.ledSize.createMany({ data: ledSizes.map((label, i) => ({ label, sortOrder: i })) });
   }
-  for (const [i, p] of packages.entries()) {
-    const { included, ...data } = p;
-    const pkg = await prisma.package.upsert({ where: { code: p.code }, update: { ...data, sortOrder: i }, create: { ...data, sortOrder: i } });
-    await prisma.packageAddon.deleteMany({ where: { packageId: pkg.id } });
-    for (const code of included) {
-      const addon = await prisma.addon.findUniqueOrThrow({ where: { code } });
-      await prisma.packageAddon.create({ data: { packageId: pkg.id, addonId: addon.id } });
+  if ((await prisma.addonCategory.count()) === 0) {
+    for (const [i, [code, name]] of categories.entries()) {
+      await prisma.addonCategory.create({ data: { code, name, sortOrder: i } });
+    }
+  }
+  if ((await prisma.addon.count()) === 0) {
+    for (const [i, [code, name, cat, isLedWall]] of addons.entries()) {
+      const category = await prisma.addonCategory.findUniqueOrThrow({ where: { code: cat } });
+      await prisma.addon.create({ data: { code, name, categoryId: category.id, isLedWall, sortOrder: i } });
+    }
+  }
+  if ((await prisma.package.count()) === 0) {
+    for (const [i, p] of packages.entries()) {
+      const { included, ...data } = p;
+      const pkg = await prisma.package.create({ data: { ...data, sortOrder: i } });
+      for (const code of included) {
+        const addon = await prisma.addon.findUnique({ where: { code } });
+        if (addon) await prisma.packageAddon.create({ data: { packageId: pkg.id, addonId: addon.id } });
+      }
     }
   }
 }

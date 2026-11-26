@@ -7,7 +7,6 @@ import {
   LED_PLACEMENTS,
   LED_PLAYOUT,
   LED_PLAYOUT_ADDON,
-  LED_SIZES,
   eventSchema,
   ledOnSiteNeeds,
   ledWallSchema,
@@ -17,6 +16,7 @@ import {
   type LedPlayout,
 } from "@/lib/booking";
 import type { MasterData } from "@/lib/masterdata";
+import { AddressInput, ClassPicker } from "./inputs";
 
 type Day = { key: string; date: string; startTime: string; endTime: string; note: string };
 
@@ -44,7 +44,6 @@ export default function BookingWizard({ data }: { data: MasterData }) {
     eventName: "",
     eventLocation: "",
     expectedVisitors: "",
-    classes: "",
     otherSeries: "",
     catering: "",
     accommodation: "",
@@ -53,6 +52,8 @@ export default function BookingWizard({ data }: { data: MasterData }) {
   });
   const [days, setDays] = useState<Day[]>([newDay()]);
   const [seriesCodes, setSeriesCodes] = useState<string[]>([]);
+  const [classList, setClassList] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   // Schritt 1
   const [perspectives, setPerspectives] = useState("2");
@@ -82,6 +83,7 @@ export default function BookingWizard({ data }: { data: MasterData }) {
   const eventPayload = () => ({
     ...event,
     expectedVisitors: event.expectedVisitors === "" ? undefined : event.expectedVisitors,
+    classes: classList.join(", "),
     days,
     seriesCodes,
   });
@@ -91,6 +93,8 @@ export default function BookingWizard({ data }: { data: MasterData }) {
     if (stepName === "Veranstaltung") {
       const r = eventSchema.safeParse(eventPayload());
       if (!r.success) result = toErrors(r.error);
+      if (!classList.length) result.classes = "Bitte mindestens eine Klasse wählen";
+      for (const q of data.questions) if (q.required && !answers[q.id]?.trim()) result[`q.${q.id}`] = "Bitte beantworten";
     } else if (stepName === "Grundsetup") {
       const r = setupSchema.safeParse({ perspectives, speakers, ledPlayout, packageCode: pkg?.code ?? "" });
       if (!r.success) result = toErrors(r.error);
@@ -129,6 +133,7 @@ export default function BookingWizard({ data }: { data: MasterData }) {
     setSubmitError(null);
     const body = {
       event: eventPayload(),
+      answers,
       setup: { perspectives, speakers, ledPlayout, packageCode: pkg?.code },
       addons: selectedAddons.map((code) => ({ code, dayKeys: addonDays[code] })),
       ledWall: ledWallBooked ? led : null,
@@ -182,7 +187,7 @@ export default function BookingWizard({ data }: { data: MasterData }) {
             <Field label="E-Mail" error={errors.contactEmail}><input className="input" type="email" value={event.contactEmail} onChange={setEv("contactEmail")} /></Field>
             <Field label="Telefon (optional)"><input className="input" value={event.contactPhone} onChange={setEv("contactPhone")} /></Field>
             <Field label="Name der VA" error={errors.eventName}><input className="input" value={event.eventName} onChange={setEv("eventName")} /></Field>
-            <Field label="Ort / Adresse" error={errors.eventLocation}><input className="input" value={event.eventLocation} onChange={setEv("eventLocation")} /></Field>
+            <div><span className="mb-1 block text-sm text-neutral-400">Ort / Adresse</span><AddressInput value={event.eventLocation} onChange={(v) => setEvent((p) => ({ ...p, eventLocation: v }))} />{errors.eventLocation && <p className="mt-1 text-sm text-red-400">{errors.eventLocation}</p>}</div>
           </Grid>
 
           <div>
@@ -213,14 +218,14 @@ export default function BookingWizard({ data }: { data: MasterData }) {
 
           <Grid>
             <Field label="Erwartete Zuschauer vor Ort"><input className="input" type="number" min={0} value={event.expectedVisitors} onChange={setEv("expectedVisitors")} /></Field>
-            <Field label="Gefahrene Klassen" error={errors.classes}><input className="input" placeholder="z. B. 3,5 t Sport, 4,5 t Standard …" value={event.classes} onChange={setEv("classes")} /></Field>
+            <div><span className="mb-1 block text-sm text-neutral-400">Gefahrene Klassen</span><ClassPicker options={data.classes} value={classList} onChange={setClassList} />{errors.classes && <p className="mt-1 text-sm text-red-400">{errors.classes}</p>}</div>
           </Grid>
 
           <div>
             <h3 className="mb-2 font-semibold">Wettkampfserien</h3>
             <div className="flex flex-wrap gap-2">
               {data.series.map((s) => (
-                <Chip key={s.code} active={seriesCodes.includes(s.code)} onClick={() => setSeriesCodes((p) => (p.includes(s.code) ? p.filter((c) => c !== s.code) : [...p, s.code]))}>
+                <Chip key={s.code} color={s.color} active={seriesCodes.includes(s.code)} onClick={() => setSeriesCodes((p) => (p.includes(s.code) ? p.filter((c) => c !== s.code) : [...p, s.code]))}>
                   {s.name}
                 </Chip>
               ))}
@@ -234,6 +239,43 @@ export default function BookingWizard({ data }: { data: MasterData }) {
             <Field label="Internet vor Ort"><textarea className="input" rows={2} placeholder="Vorhanden? Art der Verbindung (Glasfaser, LTE/5G, Starlink …)" value={event.internet} onChange={setEv("internet")} /></Field>
             <Field label="Sonstiges"><textarea className="input" rows={2} value={event.notes} onChange={setEv("notes")} /></Field>
           </Grid>
+
+          {data.questions.length > 0 && (
+            <Grid>
+              {data.questions.map((q) => {
+                const v = answers[q.id] ?? "";
+                const set = (val: string) => setAnswers((p) => ({ ...p, [q.id]: val }));
+                const label = q.label + (q.required ? "" : " (optional)");
+                if (q.type === "YESNO")
+                  return (
+                    <div key={q.id}>
+                      <span className="mb-1 block text-sm text-neutral-400">{label}</span>
+                      <div className="flex gap-2">
+                        <Chip active={v === "ja"} onClick={() => set("ja")}>Ja</Chip>
+                        <Chip active={v === "nein"} onClick={() => set("nein")}>Nein</Chip>
+                      </div>
+                      {q.help && <p className="mt-1 text-xs text-neutral-500">{q.help}</p>}
+                      {errors[`q.${q.id}`] && <p className="mt-1 text-sm text-red-400">{errors[`q.${q.id}`]}</p>}
+                    </div>
+                  );
+                return (
+                  <div key={q.id}>
+                    <Field label={label} error={errors[`q.${q.id}`]}>
+                      {q.type === "SELECT" ? (
+                        <select className="input" value={v} onChange={(e) => set(e.target.value)}>
+                          <option value="">Bitte wählen</option>
+                          {q.options.map((o) => <option key={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <input className="input" type={q.type === "NUMBER" ? "number" : "text"} value={v} onChange={(e) => set(e.target.value)} />
+                      )}
+                    </Field>
+                    {q.help && <p className="mt-1 text-xs text-neutral-500">{q.help}</p>}
+                  </div>
+                );
+              })}
+            </Grid>
+          )}
         </section>
       )}
 
@@ -246,7 +288,7 @@ export default function BookingWizard({ data }: { data: MasterData }) {
             <Field label="Wie viele Sprecher?" error={errors.speakers}><input className="input" type="number" min={0} value={speakers} onChange={(e) => { setSpeakers(e.target.value); setPackageCode(null); }} /></Field>
           </Grid>
           <div className="rounded-lg bg-neutral-900 p-3 text-sm text-neutral-300">
-            <div><span className="text-neutral-500">Klassen:</span> {event.classes || "–"}</div>
+            <div><span className="text-neutral-500">Klassen:</span> {classList.join(", ") || "–"}</div>
             <div><span className="text-neutral-500">Serie:</span> {[...data.series.filter((s) => seriesCodes.includes(s.code)).map((s) => s.name), event.otherSeries].filter(Boolean).join(", ") || "–"}</div>
           </div>
           <div>
@@ -330,7 +372,7 @@ export default function BookingWizard({ data }: { data: MasterData }) {
             <Field label="Größe" error={errors["led.size"]}>
               <select className="input" value={led.size} onChange={(e) => setLed((p) => ({ ...p, size: e.target.value }))}>
                 <option value="">Bitte wählen</option>
-                {LED_SIZES.map((s) => <option key={s}>{s}</option>)}
+                {data.ledSizes.map((s) => <option key={s}>{s}</option>)}
               </select>
             </Field>
           </Grid>
@@ -372,8 +414,11 @@ export default function BookingWizard({ data }: { data: MasterData }) {
             <Row k="Veranstalter" v={`${event.organizer} (${event.contactName}, ${event.contactEmail})`} />
             <Row k="Tage" v={days.map((d) => `${fmtDate(d.date)} ${d.startTime}–${d.endTime}`).join(" · ")} />
             <Row k="Zuschauer" v={event.expectedVisitors || "–"} />
-            <Row k="Klassen" v={event.classes} />
+            <Row k="Klassen" v={classList.join(", ")} />
             <Row k="Serien" v={[...data.series.filter((s) => seriesCodes.includes(s.code)).map((s) => s.name), event.otherSeries].filter(Boolean).join(", ") || "–"} />
+            {data.questions.filter((q) => answers[q.id]).map((q) => (
+              <Row key={q.id} k={q.label} v={q.type === "YESNO" ? (answers[q.id] === "ja" ? "Ja" : "Nein") : answers[q.id]} />
+            ))}
           </Summary>
           <Summary title="Grundsetup">
             <Row k="Paket" v={`${pkg?.name} (${pkg?.priceCategory})`} />
@@ -425,11 +470,13 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-function Chip({ active, onClick, children, small }: { active?: boolean; onClick: () => void; children: React.ReactNode; small?: boolean }) {
+function Chip({ active, onClick, children, small, color }: { active?: boolean; onClick: () => void; children: React.ReactNode; small?: boolean; color?: string }) {
+  const glow = active && color ? { backgroundColor: color, borderColor: color, color: "#fff", boxShadow: `0 0 18px ${color}99` } : undefined;
   return (
     <button
       type="button"
       onClick={onClick}
+      style={glow}
       className={`rounded-full border ${small ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"} transition ${active ? "border-amber-500 bg-amber-500 font-semibold text-black" : "border-neutral-600 text-neutral-300 hover:border-neutral-400"}`}
     >
       {children}
