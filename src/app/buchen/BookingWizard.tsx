@@ -73,8 +73,9 @@ export default function BookingWizard({ data }: { data: MasterData }) {
   );
   const pkg = data.packages.find((p) => p.code === (packageCode ?? recommended?.code));
   const included = new Set(pkg?.includedAddonCodes ?? []);
+  const excluded = new Set(pkg?.excludedAddonCodes ?? []);
   const allAddons = data.addonCategories.flatMap((c) => c.addons);
-  const selectedAddons = Object.keys(addonDays).filter((c) => !included.has(c));
+  const selectedAddons = Object.keys(addonDays).filter((c) => !included.has(c) && !excluded.has(c));
   const ledWallBooked = selectedAddons.some((c) => allAddons.find((a) => a.code === c)?.isLedWall);
 
   const steps = ["Veranstaltung", "Grundsetup", "Add-ons", ...(ledWallBooked ? ["LED-Wand"] : []), "Zusammenfassung"];
@@ -116,7 +117,7 @@ export default function BookingWizard({ data }: { data: MasterData }) {
       setAddonDays((prev) => {
         const nextSel = { ...prev };
         for (const c of Object.values(LED_PLAYOUT_ADDON)) if (c && c !== code && nextSel[c]) delete nextSel[c];
-        if (code && !nextSel[code]) nextSel[code] = days.map((d) => d.key);
+        if (code && !nextSel[code] && !excluded.has(code)) nextSel[code] = days.map((d) => d.key);
         return nextSel;
       });
     }
@@ -335,14 +336,17 @@ export default function BookingWizard({ data }: { data: MasterData }) {
               <div className="space-y-2">
                 {cat.addons.map((a) => {
                   const inc = included.has(a.code);
-                  const sel = !inc && !!addonDays[a.code];
+                  const exc = !inc && excluded.has(a.code);
+                  const sel = !inc && !exc && !!addonDays[a.code];
                   return (
-                    <div key={a.code} className={`rounded-lg border p-3 ${sel ? "border-amber-500 bg-amber-500/5" : "border-neutral-700"} ${inc ? "opacity-70" : ""}`}>
+                    <div key={a.code} className={`rounded-lg border p-3 ${sel ? "border-amber-500 bg-amber-500/5" : "border-neutral-700"} ${inc ? "opacity-70" : ""} ${exc ? "opacity-40" : ""}`}>
                       <label className="flex cursor-pointer items-center gap-3">
-                        <input type="checkbox" className="size-4 accent-amber-500" disabled={inc} checked={inc || sel} onChange={() => toggleAddon(a.code)} />
+                        <input type="checkbox" className="size-4 accent-amber-500" disabled={inc || exc} checked={inc || sel} onChange={() => toggleAddon(a.code)} />
                         <span className="flex-1">{a.name}</span>
                         {inc ? (
                           <span className="rounded bg-emerald-700/40 px-2 py-0.5 text-xs text-emerald-300">im Paket enthalten</span>
+                        ) : exc ? (
+                          <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-400">nicht mit Paket {pkg?.name}</span>
                         ) : (
                           <span className="text-sm text-neutral-400">{a.priceHint ?? "Preis folgt"}</span>
                         )}

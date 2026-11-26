@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     .map((q) => ({ label: q.label, answer: q.type === "YESNO" ? (answers[q.id] === "ja" ? "Ja" : "Nein") : answers[q.id].trim() }));
 
   const [pkg, series, addonRows] = await Promise.all([
-    prisma.package.findUnique({ where: { code: setup.packageCode }, include: { includedAddons: { include: { addon: true } } } }),
+    prisma.package.findUnique({ where: { code: setup.packageCode }, include: { includedAddons: { include: { addon: true } }, excludedAddons: { include: { addon: true } } } }),
     prisma.series.findMany({ where: { code: { in: event.seriesCodes } } }),
     prisma.addon.findMany({ where: { code: { in: addons.map((a) => a.code) } } }),
   ]);
@@ -27,6 +27,8 @@ export async function POST(req: Request) {
   const included = new Set(pkg.includedAddons.map((ia) => ia.addon.code));
   const dayKeys = new Set(event.days.map((d) => d.key));
   const chosen = addons.filter((a) => !included.has(a.code));
+  const excluded = pkg.excludedAddons.find((e) => chosen.some((a) => a.code === e.addon.code));
+  if (excluded) return NextResponse.json({ error: `${excluded.addon.name} ist mit dem Paket ${pkg.name} nicht möglich` }, { status: 400 });
   for (const a of chosen) {
     if (!addonRows.some((r) => r.code === a.code)) return NextResponse.json({ error: `Unbekanntes Add-on ${a.code}` }, { status: 400 });
     if (a.dayKeys.some((k) => !dayKeys.has(k))) return NextResponse.json({ error: "Ungültiger Tag bei Add-on" }, { status: 400 });

@@ -18,7 +18,7 @@ export async function loadMasterData(): Promise<MasterData> {
     prisma.package.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      include: { includedAddons: { include: { addon: true } } },
+      include: { includedAddons: { include: { addon: true } }, excludedAddons: { include: { addon: true } } },
     }),
     prisma.addonCategory.findMany({
       orderBy: { sortOrder: "asc" },
@@ -41,6 +41,7 @@ export async function loadMasterData(): Promise<MasterData> {
       maxPerspectives: p.maxPerspectives,
       maxSpeakers: p.maxSpeakers,
       includedAddonCodes: p.includedAddons.map((ia) => ia.addon.code),
+      excludedAddonCodes: p.excludedAddons.map((ea) => ea.addon.code),
     })),
     addonCategories: categories.map((c) => ({
       code: c.code,

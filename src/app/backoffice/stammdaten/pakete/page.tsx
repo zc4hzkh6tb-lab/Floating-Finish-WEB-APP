@@ -7,17 +7,17 @@ export const metadata = { title: "Pakete" };
 
 type Cat = { id: string; name: string; addons: { id: string; name: string }[] };
 
-function AddonPicker({ categories, selected }: { categories: Cat[]; selected: Set<string> }) {
+function AddonPicker({ categories, selected, name = "addonIds", title, accent = "accent-amber-500" }: { categories: Cat[]; selected: Set<string>; name?: string; title: string; accent?: string }) {
   return (
     <div className="space-y-2 sm:col-span-4">
-      <span className="block text-xs text-neutral-400">Im Paket enthalten (wird in der Buchung als „im Paket enthalten“ markiert)</span>
+      <span className="block text-xs text-neutral-400">{title}</span>
       {categories.map((c) => (
         <div key={c.id}>
           <div className="mb-1 text-xs font-semibold text-neutral-500">{c.name}</div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {c.addons.map((a) => (
               <label key={a.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="addonIds" value={a.id} defaultChecked={selected.has(a.id)} className="size-4 accent-amber-500" />
+                <input type="checkbox" name={name} value={a.id} defaultChecked={selected.has(a.id)} className={`size-4 ${accent}`} />
                 {a.name}
               </label>
             ))}
@@ -43,7 +43,7 @@ function Fields({ p }: { p?: { name: string; description: string; priceCategory:
 
 export default async function PaketePage() {
   const [packages, categories] = await Promise.all([
-    prisma.package.findMany({ orderBy: { sortOrder: "asc" }, include: { includedAddons: true } }),
+    prisma.package.findMany({ orderBy: { sortOrder: "asc" }, include: { includedAddons: true, excludedAddons: true } }),
     prisma.addonCategory.findMany({ orderBy: { sortOrder: "asc" }, include: { addons: { where: { active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } } } }),
   ]);
   return (
@@ -53,7 +53,8 @@ export default async function PaketePage() {
           <form action={savePackage} className="grid gap-3 sm:grid-cols-4">
             <input type="hidden" name="id" value={p.id} />
             <Fields p={p} />
-            <AddonPicker categories={categories} selected={new Set(p.includedAddons.map((i) => i.addonId))} />
+            <AddonPicker categories={categories} selected={new Set(p.includedAddons.map((i) => i.addonId))} title="Im Paket enthalten (wird in der Buchung als „im Paket enthalten“ markiert)" />
+            <AddonPicker categories={categories} selected={new Set(p.excludedAddons.map((i) => i.addonId))} name="excludedIds" accent="accent-red-500" title="Funktioniert NICHT mit diesem Paket (in der Buchung ausgegraut)" />
             <div className="flex items-center gap-4 sm:col-span-4">
               <Check name="active" label="aktiv" defaultChecked={p.active} />
               <SaveButton />
@@ -66,7 +67,8 @@ export default async function PaketePage() {
         <NewTitle>Neues Paket</NewTitle>
         <form action={savePackage} className="grid gap-3 sm:grid-cols-4">
           <Fields />
-          <AddonPicker categories={categories} selected={new Set()} />
+          <AddonPicker categories={categories} selected={new Set()} title="Im Paket enthalten (wird in der Buchung als „im Paket enthalten“ markiert)" />
+          <AddonPicker categories={categories} selected={new Set()} name="excludedIds" accent="accent-red-500" title="Funktioniert NICHT mit diesem Paket (in der Buchung ausgegraut)" />
           <div className="sm:col-span-4"><SaveButton label="Hinzufügen" /></div>
         </form>
       </Card>

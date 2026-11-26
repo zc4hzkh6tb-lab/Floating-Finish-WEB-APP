@@ -32,6 +32,8 @@ model Package {
   maxPerspectives Int?
   maxSpeakers     Int?
   includedAddons  PackageAddon[]
+  // Add-ons, die mit diesem Paket nicht funktionieren
+  excludedAddons  PackageExcludedAddon[]
   bookings        BookingRequest[]
 }
 
@@ -55,6 +57,7 @@ model Addon {
   sortOrder   Int           @default(0)
   active      Boolean       @default(true)
   inPackages  PackageAddon[]
+  notWith     PackageExcludedAddon[]
   bookings    BookingAddon[]
 }
 
@@ -99,6 +102,15 @@ model CustomQuestion {
   sortOrder Int          @default(0)
   active    Boolean      @default(true)
   createdAt DateTime     @default(now())
+}
+
+model PackageExcludedAddon {
+  packageId String
+  addonId   String
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  addon     Addon   @relation(fields: [addonId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, addonId])
 }
 
 // ---------- Buchungsanfragen ----------

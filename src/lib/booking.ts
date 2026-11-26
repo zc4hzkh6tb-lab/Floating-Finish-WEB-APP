@@ -94,6 +94,7 @@ export type PackageInfo = {
   maxPerspectives: number | null;
   maxSpeakers: number | null;
   includedAddonCodes: string[];
+  excludedAddonCodes: string[];
 };
 
 /** Kleinstes Paket, das Perspektiven und Sprecher abdeckt (Pakete sind nach Größe sortiert). */

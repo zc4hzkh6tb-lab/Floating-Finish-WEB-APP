@@ -159,7 +159,8 @@ export async function savePackage(f: FormData) {
     active: id ? bool(f, "active") : true,
   };
   if (!data.name) return;
-  const addonIds = f.getAll("addonIds").map(String);
+  const excludedIds = f.getAll("excludedIds").map(String);
+  const addonIds = f.getAll("addonIds").map(String).filter((a) => !excludedIds.includes(a));
   await prisma.$transaction(async (tx) => {
     let pkgId = id;
     if (id) await tx.package.update({ where: { id }, data });
@@ -169,6 +170,8 @@ export async function savePackage(f: FormData) {
     }
     await tx.packageAddon.deleteMany({ where: { packageId: pkgId } });
     if (addonIds.length) await tx.packageAddon.createMany({ data: addonIds.map((addonId) => ({ packageId: pkgId, addonId })) });
+    await tx.packageExcludedAddon.deleteMany({ where: { packageId: pkgId } });
+    if (excludedIds.length) await tx.packageExcludedAddon.createMany({ data: excludedIds.map((addonId) => ({ packageId: pkgId, addonId })) });
   });
   done("/backoffice/stammdaten/pakete");
 }
