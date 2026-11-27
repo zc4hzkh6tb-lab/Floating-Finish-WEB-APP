@@ -59,8 +59,8 @@ export const eventSchema = z.object({
 export const setupSchema = z.object({
   perspectives: z.coerce.number().int().min(1, "Mindestens 1 Perspektive"),
   speakers: z.coerce.number().int().min(0),
-  ledPlayout: z.enum(["NONE", "STREAM", "STREAM_ADS", "OWN_MIX"]),
-  packageCode: z.string().min(1, "Bitte ein Paket wählen"),
+  ledPlayout: z.string().default(""),
+  packageCode: z.string().default(""),
 });
 
 export const addonSelectionSchema = z.object({
@@ -88,6 +88,9 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 
 export type PackageInfo = {
   code: string;
+  sortOrder: number;
+  customerItems: string[]; // für den Kunden sichtbare Bestandteile der Anlage
+  rigText: string | null;
   name: string;
   description: string;
   priceCategory: string;
@@ -116,4 +119,24 @@ export function ledOnSiteNeeds(led: { count: number; size: string; placements: s
   if (!led.hasMount) needs.push("Wir bringen eine Ständerung mit: zusätzliche Stellfläche und Ballast einplanen");
   if (led.placements.some((p) => p.startsWith("ENDE"))) needs.push("Sicherheitsabstand am Bahnende mit der Rennleitung abstimmen");
   return needs;
+}
+
+export type RuleInfo = { type: "MIN_PACKAGE" | "CUSTOM_OFFER"; seriesCodes: string[]; matchAll: boolean; packageCode: string | null; message: string };
+
+/** Wertet die Buchungsregeln für die gewählten Serien aus. */
+export function evaluateRules(rules: RuleInfo[], seriesCodes: string[], packages: PackageInfo[]) {
+  const hits = rules.filter((r) =>
+    r.seriesCodes.length > 0 && (r.matchAll ? r.seriesCodes.every((c) => seriesCodes.includes(c)) : r.seriesCodes.some((c) => seriesCodes.includes(c))),
+  );
+  let minSort = -Infinity;
+  let minPackage: PackageInfo | undefined;
+  for (const r of hits.filter((h) => h.type === "MIN_PACKAGE")) {
+    const p = packages.find((x) => x.code === r.packageCode);
+    if (p && p.sortOrder > minSort) {
+      minSort = p.sortOrder;
+      minPackage = p;
+    }
+  }
+  const customOffer = hits.some((h) => h.type === "CUSTOM_OFFER");
+  return { hits, minSort, minPackage, customOffer, messages: hits.map((h) => h.message) };
 }

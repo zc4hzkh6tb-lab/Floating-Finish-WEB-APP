@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="de">
       <body className="min-h-screen bg-neutral-950 text-neutral-100 antialiased">
-        <header className="border-b border-neutral-800">
+        <header className="border-b border-neutral-800 print:hidden">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
             <Link href="/" className="font-bold tracking-tight">Floating<span className="text-amber-400">Finish</span></Link>
             <nav className="flex gap-4 text-sm text-neutral-400">

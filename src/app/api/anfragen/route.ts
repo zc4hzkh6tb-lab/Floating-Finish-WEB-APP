@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { bookingSchema } from "@/lib/booking";
+import { bookingSchema, evaluateRules } from "@/lib/booking";
+import { loadMasterData } from "@/lib/masterdata";
 
 export async function POST(req: Request) {
   const parsed = bookingSchema.safeParse(await req.json().catch(() => null));
@@ -22,13 +23,17 @@ export async function POST(req: Request) {
     prisma.series.findMany({ where: { code: { in: event.seriesCodes } } }),
     prisma.addon.findMany({ where: { code: { in: addons.map((a) => a.code) } } }),
   ]);
-  if (!pkg) return NextResponse.json({ error: "Unbekanntes Paket" }, { status: 400 });
+  const md = await loadMasterData();
+  const rules = evaluateRules(md.rules, event.seriesCodes, md.packages);
+  if (!pkg && !rules.customOffer) return NextResponse.json({ error: "Bitte ein Paket wählen" }, { status: 400 });
+  if (pkg && pkg.sortOrder < rules.minSort) return NextResponse.json({ error: `Bei den gewählten Serien ist mindestens das Paket ${rules.minPackage?.name} nötig` }, { status: 400 });
+  if (setup.ledPlayout && !md.ledPlayouts.some((o) => o.code === setup.ledPlayout)) return NextResponse.json({ error: "Unbekannte LED-Bespielung" }, { status: 400 });
 
-  const included = new Set(pkg.includedAddons.map((ia) => ia.addon.code));
+  const included = new Set(pkg?.includedAddons.map((ia) => ia.addon.code) ?? []);
   const dayKeys = new Set(event.days.map((d) => d.key));
   const chosen = addons.filter((a) => !included.has(a.code));
-  const excluded = pkg.excludedAddons.find((e) => chosen.some((a) => a.code === e.addon.code));
-  if (excluded) return NextResponse.json({ error: `${excluded.addon.name} ist mit dem Paket ${pkg.name} nicht möglich` }, { status: 400 });
+  const excluded = pkg?.excludedAddons.find((e) => chosen.some((a) => a.code === e.addon.code));
+  if (excluded) return NextResponse.json({ error: `${excluded.addon.name} ist mit dem Paket ${pkg?.name} nicht möglich` }, { status: 400 });
   for (const a of chosen) {
     if (!addonRows.some((r) => r.code === a.code)) return NextResponse.json({ error: `Unbekanntes Add-on ${a.code}` }, { status: 400 });
     if (a.dayKeys.some((k) => !dayKeys.has(k))) return NextResponse.json({ error: "Ungültiger Tag bei Add-on" }, { status: 400 });
@@ -55,8 +60,10 @@ export async function POST(req: Request) {
         customAnswers: customAnswers.length ? customAnswers : undefined,
         perspectives: setup.perspectives,
         speakers: setup.speakers,
-        ledPlayout: setup.ledPlayout,
-        packageId: pkg.id,
+        ledPlayout: setup.ledPlayout || null,
+        packageId: pkg?.id ?? null,
+        customOffer: rules.customOffer,
+        ruleHints: rules.messages,
         series: { create: series.map((s) => ({ seriesId: s.id })) },
       },
     });
@@ -78,7 +85,7 @@ export async function POST(req: Request) {
         data: { bookingId: b.id, count: ledWall.count, size: ledWall.size, placements: ledWall.placements, hasMount: ledWall.hasMount, mountInfo: ledWall.mountInfo || null },
       });
     }
-    await tx.bookingEvent.create({ data: { bookingId: b.id, actor: "Kunde", text: "Anfrage über die Buchungsseite eingegangen" } });
+    await tx.bookingEvent.create({ data: { bookingId: b.id, actor: "Kunde", text: "Anfrage über die Buchungsseite eingegangen" + (rules.customOffer ? " (laut Regel: eigenes Angebot nötig)" : "") } });
     return b;
   });
 

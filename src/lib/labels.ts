@@ -31,3 +31,10 @@ export const STATUS_BAR: Record<BookingStatus, string> = {
   ABGERECHNET: "border-l-neutral-500",
   ABGESAGT: "border-l-red-500",
 };
+
+export const ADDON_GROUP = { KAMERA: "Kameraperspektiven", ADDON: "Add-ons", SONSTIGES: "Sonstiges (Sprecher, Interviews …)", LED: "LED-Wand" } as const;
+export const ARTICLE_KIND = { GERAET: "Gerät", ZUBEHOER: "Zubehör", KABEL: "Kabel", VERBRAUCH: "Verbrauchsmaterial" } as const;
+export const UNIT_STATUS = { OK: "einsatzbereit", DEFEKT: "defekt", REPARATUR: "in Reparatur", VERLIEHEN: "verliehen", AUSGEMUSTERT: "ausgemustert" } as const;
+export const OFFER_STATUS = { ENTWURF: "Entwurf", VERSENDET: "versendet", ANGENOMMEN: "angenommen", ABGELEHNT: "abgelehnt" } as const;
+export const SOURCE_LABEL: Record<string, string> = { BUCHUNG: "Buchungstool", SCHNELL: "Schnellanfrage", INTERN: "intern erfasst" };
+export const eur = (n: number) => n.toLocaleString("de-DE", { style: "currency", currency: "EUR" });

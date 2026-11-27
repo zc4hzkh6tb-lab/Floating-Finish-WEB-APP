@@ -28,7 +28,8 @@ function AddonPicker({ categories, selected, name = "addonIds", title, accent = 
   );
 }
 
-function Fields({ p }: { p?: { name: string; description: string; priceCategory: string; maxPerspectives: number | null; maxSpeakers: number | null; sortOrder: number } }) {
+type Rig = { id: string; name: string };
+function Fields({ p, rigs }: { rigs: Rig[]; p?: { name: string; description: string; priceCategory: string; maxPerspectives: number | null; maxSpeakers: number | null; sortOrder: number; price: number | null; rigId: string | null } }) {
   return (
     <>
       <L label="Name"><input name="name" defaultValue={p?.name} className="input" required /></L>
@@ -36,15 +37,23 @@ function Fields({ p }: { p?: { name: string; description: string; priceCategory:
       <L label="Max. Perspektiven"><input name="maxPerspectives" type="number" defaultValue={p?.maxPerspectives ?? ""} className="input" placeholder="unbegrenzt" /></L>
       <L label="Max. Sprecher"><input name="maxSpeakers" type="number" defaultValue={p?.maxSpeakers ?? ""} className="input" placeholder="unbegrenzt" /></L>
       <L label="Beschreibung" className="sm:col-span-3"><input name="description" defaultValue={p?.description} className="input" /></L>
-      <L label="Reihenfolge"><input name="sortOrder" type="number" defaultValue={p?.sortOrder ?? 0} className="input" /></L>
+      <L label="Reihenfolge (klein → groß)"><input name="sortOrder" type="number" defaultValue={p?.sortOrder ?? 0} className="input" /></L>
+      <L label="Interner Preis pro Tag (€, für Angebote)"><input name="price" type="number" step="0.01" defaultValue={p?.price ?? ""} className="input" /></L>
+      <L label="Anlage (Technik aus dem Inventar)" className="sm:col-span-2">
+        <select name="rigId" defaultValue={p?.rigId ?? ""} className="input">
+          <option value="">– keine –</option>
+          {rigs.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+      </L>
     </>
   );
 }
 
 export default async function PaketePage() {
-  const [packages, categories] = await Promise.all([
+  const [packages, categories, rigs] = await Promise.all([
     prisma.package.findMany({ orderBy: { sortOrder: "asc" }, include: { includedAddons: true, excludedAddons: true } }),
     prisma.addonCategory.findMany({ orderBy: { sortOrder: "asc" }, include: { addons: { where: { active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } } } }),
+    prisma.rig.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
   ]);
   return (
     <Page title="Pakete" intro="Grundpakete aus Schritt 1. Empfohlen wird das erste Paket (nach Reihenfolge), das die gewünschten Perspektiven und Sprecher abdeckt. Leeres Feld = unbegrenzt.">
@@ -52,7 +61,7 @@ export default async function PaketePage() {
         <Card key={p.id} muted={!p.active}>
           <form action={savePackage} className="grid gap-3 sm:grid-cols-4">
             <input type="hidden" name="id" value={p.id} />
-            <Fields p={p} />
+            <Fields p={p} rigs={rigs} />
             <AddonPicker categories={categories} selected={new Set(p.includedAddons.map((i) => i.addonId))} title="Im Paket enthalten (wird in der Buchung als „im Paket enthalten“ markiert)" />
             <AddonPicker categories={categories} selected={new Set(p.excludedAddons.map((i) => i.addonId))} name="excludedIds" accent="accent-red-500" title="Funktioniert NICHT mit diesem Paket (in der Buchung ausgegraut)" />
             <div className="flex items-center gap-4 sm:col-span-4">
@@ -66,7 +75,7 @@ export default async function PaketePage() {
       <Card>
         <NewTitle>Neues Paket</NewTitle>
         <form action={savePackage} className="grid gap-3 sm:grid-cols-4">
-          <Fields />
+          <Fields rigs={rigs} />
           <AddonPicker categories={categories} selected={new Set()} title="Im Paket enthalten (wird in der Buchung als „im Paket enthalten“ markiert)" />
           <AddonPicker categories={categories} selected={new Set()} name="excludedIds" accent="accent-red-500" title="Funktioniert NICHT mit diesem Paket (in der Buchung ausgegraut)" />
           <div className="sm:col-span-4"><SaveButton label="Hinzufügen" /></div>

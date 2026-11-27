@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, type BookingStatus, type QuestionType } from "@prisma/client";
+import { Prisma, type AddonGroup, type BookingStatus, type QuestionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { STATUS_LABEL, fmtDay } from "@/lib/labels";
 import { requireBackoffice } from "@/lib/auth";
@@ -11,6 +11,10 @@ const optStr = (f: FormData, k: string) => str(f, k) || null;
 const int = (f: FormData, k: string, d = 0) => {
   const v = parseInt(str(f, k), 10);
   return Number.isFinite(v) ? v : d;
+};
+const optFloat = (f: FormData, k: string) => {
+  const v = parseFloat(str(f, k).replace(",", "."));
+  return Number.isFinite(v) ? v : null;
 };
 const optInt = (f: FormData, k: string) => {
   const v = parseInt(str(f, k), 10);
@@ -102,7 +106,7 @@ export async function deleteLedSize(f: FormData) {
 export async function saveCategory(f: FormData) {
   await requireBackoffice();
   const id = str(f, "id");
-  const data = { name: str(f, "name"), sortOrder: int(f, "sortOrder") };
+  const data = { name: str(f, "name"), sortOrder: int(f, "sortOrder"), group: (str(f, "group") || "ADDON") as AddonGroup };
   if (!data.name) return;
   if (id) await prisma.addonCategory.update({ where: { id }, data });
   else {
@@ -125,6 +129,7 @@ export async function saveAddon(f: FormData) {
     name: str(f, "name"),
     description: optStr(f, "description"),
     priceHint: optStr(f, "priceHint"),
+    price: optFloat(f, "price"),
     categoryId: str(f, "categoryId"),
     isLedWall: bool(f, "isLedWall"),
     sortOrder: int(f, "sortOrder"),
@@ -155,6 +160,8 @@ export async function savePackage(f: FormData) {
     priceCategory: str(f, "priceCategory") || "€",
     maxPerspectives: optInt(f, "maxPerspectives"),
     maxSpeakers: optInt(f, "maxSpeakers"),
+    price: optFloat(f, "price"),
+    rigId: optStr(f, "rigId"),
     sortOrder: int(f, "sortOrder"),
     active: id ? bool(f, "active") : true,
   };

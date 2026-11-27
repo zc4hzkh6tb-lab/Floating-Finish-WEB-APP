@@ -5,6 +5,7 @@ export const metadata = { title: { default: "Team-App", template: "%s · Team-Ap
 
 const tabs = [
   ["/app", "Start"],
+  ["/app/chat", "Chats"],
   ["/app/kalender", "Kalender"],
   ["/app/team", "Team"],
   ["/app/profil", "Profil"],
@@ -20,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       {children}
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="mx-auto grid max-w-xl grid-cols-4">
+        <div className="mx-auto grid max-w-xl grid-cols-5">
           {tabs.map(([href, label]) => (
             <Link key={href} href={href} className="py-3 text-center text-sm text-neutral-300 hover:text-amber-400">{label}</Link>
           ))}

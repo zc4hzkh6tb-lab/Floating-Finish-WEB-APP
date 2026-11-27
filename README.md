@@ -45,3 +45,13 @@ Alternativ manuell:
    - `DATABASE_URL` – der Connection String aus Schritt 1
    - `BACKOFFICE_USER` und `BACKOFFICE_PASSWORD` – Zugang fürs Backoffice
 3. **Deploy** klicken. Beim Build laufen automatisch die Datenbank-Migrationen und die Startdaten (`vercel-build`).
+
+## Backoffice-Module (Stand 27.11.2026)
+
+- **Aufträge:** Anfragen mit Angeboten (Druckansicht/PDF), Materialliste aus Paket-Anlage und Add-on-Material, Checklisten, Aufbauplänen und Projekt-Chat. Schnellanfrage intern (`/backoffice/schnellanfrage`) und öffentlich (`/buchen/schnell`).
+- **Lager & Technik:** Inventar mit Einzelgeräten (Serien-/Inventarnummer, Status), Anlagen aus Inventar mit „Kunde sieht“ je Position, Material je Add-on.
+- **Personal:** Personalakte mit Adresse, Geburtsdatum, Positionen, Qualifikationen, Führerscheinen.
+- **Buchungstool:** Pakete (Anlage, interner Preis), Add-ons in Bereichen (Kameras / Add-ons / Sonstiges / LED), Regeln (Mindestpaket je Serie, Kombination → eigenes Angebot), LED-Bespielung.
+- **Auswertungen** nach Jahr und Serie; **Einstellungen** für Firmendaten und Buchungstexte.
+
+Alle Beispieldaten legt der Seed nur einmal an (leere Tabellen bzw. Merker in `Setting`). Danach gilt, was im Backoffice gepflegt wird.

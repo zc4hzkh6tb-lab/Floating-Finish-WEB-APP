@@ -2,37 +2,71 @@ import Link from "next/link";
 import { requireBackoffice } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/session";
 
-const nav = [
-  ["/backoffice", "Anfragen"],
-  ["/backoffice/stammdaten/pakete", "Pakete"],
-  ["/backoffice/stammdaten/addons", "Add-ons"],
-  ["/backoffice/stammdaten/serien", "Serien"],
-  ["/backoffice/stammdaten/klassen", "Klassen"],
-  ["/backoffice/stammdaten/led-groessen", "LED-Größen"],
-  ["/backoffice/fragen", "Eigene Fragen"],
+type Item = [href: string, label: string];
+const groups: [string, Item[]][] = [
+  ["Aufträge", [["/backoffice", "Anfragen"], ["/backoffice/schnellanfrage", "Schnellanfrage"], ["/backoffice/angebote", "Angebote"], ["/backoffice/plaene", "Pläne"]]],
+  ["Kontakte", [["/backoffice/daten/veranstalter", "Veranstalter"], ["/backoffice/daten/locations", "Locations"]]],
+  ["Lager & Technik", [["/backoffice/inventar", "Inventar"], ["/backoffice/anlagen", "Anlagen"], ["/backoffice/daten/artikelkategorien", "Artikelkategorien"]]],
+  ["Personal", [["/backoffice/personal", "Personal"], ["/backoffice/daten/positionen", "Positionen"], ["/backoffice/daten/qualifikationen", "Qualifikationen"], ["/backoffice/daten/fuehrerscheine", "Führerscheine"], ["/backoffice/daten/checklisten", "Checklisten-Vorlagen"]]],
+  [
+    "Buchungstool",
+    [
+      ["/backoffice/stammdaten/pakete", "Pakete"],
+      ["/backoffice/stammdaten/addons", "Add-ons"],
+      ["/backoffice/daten/regeln", "Regeln"],
+      ["/backoffice/stammdaten/serien", "Serien"],
+      ["/backoffice/stammdaten/klassen", "Klassen"],
+      ["/backoffice/daten/led-bespielung", "LED-Bespielung"],
+      ["/backoffice/stammdaten/led-groessen", "LED-Größen"],
+      ["/backoffice/fragen", "Eigene Fragen"],
+    ],
+  ],
+  ["Auswertung", [["/backoffice/auswertungen", "Auswertungen"]]],
+  ["System", [["/backoffice/einstellungen", "Einstellungen"], ["/backoffice/daten/plan-symbole", "Plan-Symbole"]]],
 ];
 
-export default async function BackofficeLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireBackoffice();
-  const items = user.role === "ADMIN" ? [...nav, ["/backoffice/nutzer", "Nutzer"]] : nav;
+function Nav({ admin }: { admin: boolean }) {
   return (
-    <div>
-      <nav className="border-b border-neutral-800 bg-neutral-900/50">
-        <div className="mx-auto flex max-w-5xl items-center gap-1 px-4 py-2 text-sm">
-          <div className="flex flex-1 gap-1 overflow-x-auto">
-            {items.map(([href, label]) => (
-              <Link key={href} href={href} className="whitespace-nowrap rounded-md px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white">
+    <nav className="space-y-4 text-sm">
+      {groups.map(([title, items]) => {
+        const all = title === "System" && admin ? [...items, ["/backoffice/nutzer", "Nutzer & Zugänge"] as Item] : items;
+        return (
+          <div key={title}>
+            <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{title}</div>
+            {all.map(([href, label]) => (
+              <Link key={href} href={href} className="block rounded-md px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white">
                 {label}
               </Link>
             ))}
           </div>
-          <span className="hidden whitespace-nowrap text-xs text-neutral-500 sm:inline">{user.name} · {ROLE_LABEL[user.role]}</span>
-          <form action="/logout" method="post">
-            <button className="whitespace-nowrap rounded-md px-3 py-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-white">Abmelden</button>
+        );
+      })}
+    </nav>
+  );
+}
+
+export default async function BackofficeLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireBackoffice();
+  const admin = user.role === "ADMIN";
+  return (
+    <div className="lg:flex">
+      <aside className="print:hidden border-b border-neutral-800 bg-neutral-900/50 lg:sticky lg:top-0 lg:h-screen lg:w-56 lg:shrink-0 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+        <div className="flex items-center justify-between px-4 py-3 lg:block">
+          <div>
+            <div className="font-semibold">Backoffice</div>
+            <div className="text-xs text-neutral-500">{user.name} · {ROLE_LABEL[user.role]}</div>
+          </div>
+          <form action="/logout" method="post" className="lg:mt-2">
+            <button className="rounded-md px-0 py-1 text-xs text-neutral-400 hover:text-white">Abmelden</button>
           </form>
         </div>
-      </nav>
-      {children}
+        <details className="px-2 pb-3 lg:hidden">
+          <summary className="cursor-pointer rounded-md px-3 py-1.5 text-sm text-amber-400">Menü</summary>
+          <div className="mt-2"><Nav admin={admin} /></div>
+        </details>
+        <div className="hidden px-2 pb-6 lg:block"><Nav admin={admin} /></div>
+      </aside>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

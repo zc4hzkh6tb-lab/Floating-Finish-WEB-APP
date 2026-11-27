@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { LED_PLACEMENTS, LED_PLAYOUT, ledOnSiteNeeds, type LedPlacement, type LedPlayout } from "@/lib/booking";
-import { STATUS_LABEL, fmtDay } from "@/lib/labels";
+import { LED_PLACEMENTS, ledOnSiteNeeds, type LedPlacement } from "@/lib/booking";
+import { OFFER_STATUS, SOURCE_LABEL, STATUS_LABEL, eur, fmtDay } from "@/lib/labels";
+import { addChecklist, addMaterial, createOffer, createPlan, deleteChecklist, deleteMaterial, generateMaterial, linkContacts, locationFromBooking, openChat, organizerFromBooking, updateMaterial } from "../../job-actions";
 import { StatusBadge } from "../../StatusBadge";
 import { createStaffRequests, withdrawStaffRequest, addBookingAddon, addHistoryEntry, removeBookingAddon, saveInternalNotes, setBookingPackage, setBookingStatus } from "../../actions";
 
@@ -16,7 +17,7 @@ const fmtTime = (d: Date) => d.toLocaleString("de-DE", { timeZone: "Europe/Berli
 
 export default async function AnfragePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [b, packages, categories, team] = await Promise.all([
+  const [b, packages, categories, team, organizers, locations, articles, templates, positions, playouts] = await Promise.all([
     prisma.bookingRequest.findUnique({
       where: { id },
       include: {
@@ -27,11 +28,22 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
         ledWall: true,
         events: { orderBy: { createdAt: "desc" } },
         staff: { include: { user: true, days: { include: { day: true } } }, orderBy: { createdAt: "asc" } },
+        offers: { include: { items: true }, orderBy: { createdAt: "desc" } },
+        materials: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }], include: { article: { include: { category: true } } } },
+        plans: { orderBy: { updatedAt: "desc" } },
+        checklists: { include: { items: true }, orderBy: { createdAt: "asc" } },
+        chat: { include: { _count: { select: { messages: true } } } },
       },
     }),
     prisma.package.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.addonCategory.findMany({ orderBy: { sortOrder: "asc" }, include: { addons: { where: { active: true }, orderBy: { sortOrder: "asc" } } } }),
     prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.organizer.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.location.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.article.findMany({ where: { active: true }, orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }], include: { category: true } }),
+    prisma.checklistTemplate.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.position.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.ledPlayoutOption.findMany(),
   ]);
   if (!b) notFound();
   const answers = (Array.isArray(b.customAnswers) ? b.customAnswers : []) as { label: string; answer: string }[];
@@ -47,12 +59,12 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
   );
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8">
       <Link href="/backoffice" className="text-sm text-neutral-400 hover:text-white">← Alle Anfragen</Link>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex flex-wrap items-center gap-3 text-2xl font-bold">#{b.number} {b.eventName} <StatusBadge status={b.status} /></h1>
-          <p className="text-sm text-neutral-400">Eingegangen am {fmtTime(b.createdAt)}</p>
+          <p className="text-sm text-neutral-400">Eingegangen am {fmtTime(b.createdAt)} · {SOURCE_LABEL[b.source] ?? b.source}</p>
         </div>
         <form action={setBookingStatus} className="flex items-center gap-2">
           <input type="hidden" name="id" value={b.id} />
@@ -63,12 +75,37 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
         </form>
       </div>
 
+      {(b.customOffer || b.ruleHints.length > 0) && (
+        <div className={`mt-4 rounded-xl border p-3 text-sm ${b.customOffer ? "border-sky-600 bg-sky-950/40" : "border-amber-700 bg-amber-950/30"}`}>
+          {b.customOffer && <div className="font-semibold text-sky-300">Laut Regel: eigenes Angebot nötig</div>}
+          <ul className="list-disc pl-5">{b.ruleHints.map((h) => <li key={h}>{h}</li>)}</ul>
+        </div>
+      )}
+      {b.source !== "BUCHUNG" && (
+        <p className="mt-4 rounded-lg border border-neutral-700 p-3 text-sm text-neutral-300">Schnellanfrage: Setup, Klassen und Add-ons fehlen noch. Ergänze sie hier, sobald sie geklärt sind.</p>
+      )}
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Card title="Veranstalter">
           <R k="Veranstalter" v={b.organizer} />
           <R k="Ansprechpartner" v={b.contactName} />
           <R k="E-Mail" v={<a className="text-amber-400" href={`mailto:${b.contactEmail}`}>{b.contactEmail}</a>} />
           <R k="Telefon" v={b.contactPhone} />
+          <form action={linkContacts} className="mt-3 grid gap-2 border-t border-neutral-800 pt-3">
+            <input type="hidden" name="id" value={b.id} />
+            <select key={`o${b.organizerId}`} name="organizerId" defaultValue={b.organizerId ?? ""} className="input">
+              <option value="">Veranstalter aus Stammdaten zuordnen …</option>
+              {organizers.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            <select key={`l${b.locationId}`} name="locationId" defaultValue={b.locationId ?? ""} className="input">
+              <option value="">Location aus Stammdaten zuordnen …</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.city ? `, ${l.city}` : ""}</option>)}
+            </select>
+            <button className="btn-ghost">Zuordnung speichern</button>
+          </form>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs">
+            {!b.organizerId && <form action={organizerFromBooking}><input type="hidden" name="id" value={b.id} /><button className="text-amber-400 hover:underline">Veranstalter als neuen Stammdatensatz anlegen</button></form>}
+            {!b.locationId && <form action={locationFromBooking}><input type="hidden" name="id" value={b.id} /><button className="text-amber-400 hover:underline">Ort als neue Location anlegen</button></form>}
+          </div>
         </Card>
         <Card title="Veranstaltung">
           <R k="Ort" v={b.eventLocation} />
@@ -90,7 +127,7 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
         <Card title="Grundsetup">
           <R k="Perspektiven" v={b.perspectives} />
           <R k="Sprecher" v={b.speakers} />
-          <R k="LED-Bespielung" v={b.ledPlayout ? LED_PLAYOUT[b.ledPlayout as LedPlayout] : null} />
+          <R k="LED-Bespielung" v={b.ledPlayout ? (playouts.find((o) => o.code === b.ledPlayout)?.name ?? b.ledPlayout) : null} />
           <R k="Im Paket" v={b.package?.includedAddons.map((i) => i.addon.name).join(", ") || "–"} />
           <form action={setBookingPackage} className="mt-3 flex gap-2">
             <input type="hidden" name="id" value={b.id} />
@@ -175,7 +212,8 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
           </div>
           <form action={createStaffRequests} className="mt-4 space-y-2 border-t border-neutral-800 pt-3">
             <input type="hidden" name="id" value={b.id} />
-            <input name="task" className="input" placeholder="Aufgabe, z. B. Kamera Erdwall" required />
+            <input name="task" list="positions" className="input" placeholder="Aufgabe / Position, z. B. Kamera Erdwall" required />
+            <datalist id="positions">{positions.map((p) => <option key={p.id} value={p.name} />)}</datalist>
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {team.map((u) => (
                 <label key={u.id} className="flex items-center gap-1.5 text-xs">
@@ -199,6 +237,82 @@ export default async function AnfragePage({ params }: { params: Promise<{ id: st
           </form>
         </Card>
       </div>
+
+      <h2 className="mt-8 text-xl font-bold">Job-Planung</h2>
+      <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <Card title="Angebote">
+          {b.offers.length === 0 && <p className="text-neutral-500">Noch kein Angebot</p>}
+          {b.offers.map((o) => {
+            const net = o.items.reduce((n, i) => n + i.quantity * i.unitPrice, 0);
+            return <R key={o.id} k={`A-${o.number}`} v={<Link href={`/backoffice/angebote/${o.id}`} className="text-amber-400">{eur(net)} netto · {OFFER_STATUS[o.status]}</Link>} />;
+          })}
+          <form action={createOffer} className="mt-3"><input type="hidden" name="id" value={b.id} /><button className="btn-ghost">Angebot aus Anfrage erstellen</button></form>
+        </Card>
+        <Card title="Pläne & Team">
+          {b.plans.map((p) => <R key={p.id} k="Plan" v={<Link href={`/backoffice/plaene/${p.id}`} className="text-amber-400">{p.name}</Link>} />)}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <form action={createPlan}><input type="hidden" name="id" value={b.id} /><button className="btn-ghost">Neuer Aufbauplan</button></form>
+            <form action={openChat}><input type="hidden" name="id" value={b.id} /><button className="btn-ghost">Team-Chat {b.chat ? `(${b.chat._count.messages})` : "eröffnen"}</button></form>
+          </div>
+        </Card>
+        <Card title="Checklisten">
+          {b.checklists.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-2">
+              <span>{c.name} <span className="text-neutral-500">{c.items.filter((i) => i.done).length}/{c.items.length} erledigt</span></span>
+              <form action={deleteChecklist}><input type="hidden" name="id" value={b.id} /><input type="hidden" name="checklistId" value={c.id} /><button className="text-xs text-red-400">entfernen</button></form>
+            </div>
+          ))}
+          {b.checklists.length === 0 && <p className="text-neutral-500">Noch keine. Das Team hakt sie in der App ab.</p>}
+          <form action={addChecklist} className="mt-3 flex gap-2">
+            <input type="hidden" name="id" value={b.id} />
+            <select name="templateId" className="input">{templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>)}</select>
+            <button className="btn-ghost whitespace-nowrap" disabled={!templates.length}>Hinzufügen</button>
+          </form>
+        </Card>
+      </div>
+
+      <section className="mt-4 rounded-xl border border-neutral-800 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Materialliste <span className="text-sm font-normal text-neutral-500">{b.materials.filter((m) => m.packed).length}/{b.materials.length} gepackt</span></h2>
+          <div className="flex gap-2">
+            <form action={generateMaterial}><input type="hidden" name="id" value={b.id} /><button className="btn-ghost">{b.materials.length ? "Aus Paket & Add-ons neu erzeugen" : "Aus Paket & Add-ons erzeugen"}</button></form>
+            {b.materials.length > 0 && <Link href={`/backoffice/anfragen/${b.id}/material`} className="btn-ghost">Drucken</Link>}
+          </div>
+        </div>
+        <p className="mb-3 text-xs text-neutral-500">Neu erzeugen ersetzt nur die automatischen Positionen. Was du von Hand ergänzt, bleibt.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <tbody>
+              {b.materials.map((m) => (
+                <tr key={m.id} className="border-t border-neutral-900">
+                  <td className="py-1.5 pr-2">{m.name}<div className="text-xs text-neutral-500">{m.article?.category?.name ?? "frei"} · {m.source === "PAKET" ? "Paket" : m.source === "ADDON" ? "Add-on" : "manuell"}</div></td>
+                  <td className="py-1.5" colSpan={2}>
+                    <form action={updateMaterial} className="flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="id" value={b.id} />
+                      <input type="hidden" name="itemId" value={m.id} />
+                      <input name="quantity" type="number" min={1} defaultValue={m.quantity} className="input !w-20 !py-1" />
+                      <input name="note" defaultValue={m.note ?? ""} placeholder="Notiz" className="input !w-40 !py-1" />
+                      <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="packed" defaultChecked={m.packed} className="size-4 accent-emerald-500" />gepackt</label>
+                      <button className="text-xs text-amber-400">speichern</button>
+                    </form>
+                  </td>
+                  <td className="py-1.5 text-right"><form action={deleteMaterial}><input type="hidden" name="id" value={b.id} /><input type="hidden" name="itemId" value={m.id} /><button className="text-xs text-red-400">×</button></form></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <form action={addMaterial} className="mt-3 flex flex-wrap gap-2 border-t border-neutral-800 pt-3">
+          <input type="hidden" name="id" value={b.id} />
+          <select name="articleId" className="input !w-auto min-w-56 flex-1">
+            <option value="">Artikel aus Inventar … (oder Freitext rechts)</option>
+            {articles.map((a) => <option key={a.id} value={a.id}>{a.category ? `${a.category.name}: ` : ""}{a.name}</option>)}
+          </select>
+          <input name="name" placeholder="Freitext, z. B. Pavillon" className="input !w-48" />
+          <input name="quantity" type="number" min={1} defaultValue={1} className="input !w-20" />
+          <button className="btn-ghost">Hinzufügen</button>
+        </form>
+      </section>
 
       <section className="mt-6 rounded-xl border border-neutral-800 p-4">
         <h2 className="mb-3 font-semibold">Historie</h2>

@@ -1,8 +1,11 @@
-export function Page({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
+export function Page({ title, intro, children, actions }: { title: string; intro?: React.ReactNode; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-2xl font-bold">{title}</h1>
-      {intro && <p className="mt-1 text-sm text-neutral-400">{intro}</p>}
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-2xl font-bold">{title}</h1>
+        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      </div>
+      {intro && <div className="mt-1 text-sm text-neutral-400">{intro}</div>}
       <div className="mt-6 space-y-4">{children}</div>
     </div>
   );
@@ -44,3 +47,7 @@ export function DeleteButton({ action, id, label = "Löschen" }: { action: (f: F
 }
 
 export const NewTitle = ({ children }: { children: React.ReactNode }) => <h2 className="mb-3 font-semibold text-amber-400">{children}</h2>;
+
+export const Back = ({ href, label }: { href: string; label: string }) => (
+  <a href={href} className="text-amber-400 hover:underline">← {label}</a>
+);
